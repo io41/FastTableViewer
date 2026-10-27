@@ -31,6 +31,12 @@ type bufferContent struct {
 	tview.TableContentReadOnly
 }
 
+type cellField struct {
+	Column int
+	Name   string
+	Value  string
+}
+
 // GetRowCount returns the number of rows currently in the buffer, which grows
 // while a load is in flight.
 func (bufferContent) GetRowCount() int {
@@ -61,6 +67,7 @@ func (bufferContent) GetCell(row, column int) *tview.TableCell {
 	}
 	rowFreeze, colFreeze := b.rowFreeze, b.colFreeze
 	b.mu.RUnlock()
+	field := cellField{Column: column, Name: view.ColumnName(column), Value: cellText}
 
 	layout := view.Layout(column)
 
@@ -127,6 +134,7 @@ func (bufferContent) GetCell(row, column int) *tview.TableCell {
 	cellText = " " + truncateText(cellText, width) + " "
 
 	return tview.NewTableCell(escapeMarkup(cellText)).
+		SetReference(field).
 		SetTextColor(color).
 		SetBackgroundColor(backgroundColor).
 		SetAttributes(attributes).

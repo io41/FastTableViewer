@@ -96,6 +96,9 @@ func (v *ViewState) DataRows() int {
 
 // ColumnName returns the header text for a column, falling back to its index.
 func (v *ViewState) ColumnName(col int) string {
+	if col < 0 {
+		return ""
+	}
 	v.visible.mu.RLock()
 	defer v.visible.mu.RUnlock()
 
