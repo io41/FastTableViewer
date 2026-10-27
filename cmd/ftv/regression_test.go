@@ -1390,3 +1390,62 @@ func TestColumnNameUsesOneBasedFallbackAndRejectsNegativeIndex(t *testing.T) {
 		t.Fatalf("headerless column name = %q, want Column 1", got)
 	}
 }
+
+func TestRowViewerRespectsColumnVisibilityAfterIntegration(t *testing.T) {
+	initView()
+	args.setDefault()
+	args.HideNum = []int{2}
+	buf, err := createNewBufferWithData([][]string{
+		{"id", "secret", "notes"},
+		{"alpha", "PRIVATE_FIELD_TOKEN", strings.Repeat("complete ", 30) + "FULL_VALUE_END_TOKEN"},
+		{"beta", "OTHER_PRIVATE_TOKEN", "NEXT_ROW_VALUE_TOKEN"},
+	}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view = NewViewState(buf)
+	if err := drawUI(); err != nil {
+		t.Fatal(err)
+	}
+	bufferTable.Select(1, 1)
+	bufferTable.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, 0), func(p tview.Primitive) { app.SetFocus(p) })
+	reader := app.GetFocus().(*tview.TextView)
+	text := reader.GetText(true)
+	if !strings.Contains(text, "3 notes") || !strings.Contains(text, "FULL_VALUE_END_TOKEN") || strings.Contains(text, "PRIVATE_FIELD_TOKEN") || strings.Contains(text, "secret") {
+		t.Fatalf("row viewer did not follow displayed columns: %q", text)
+	}
+	reader.InputHandler()(tcell.NewEventKey(tcell.KeyRune, 'n', 0), func(p tview.Primitive) { app.SetFocus(p) })
+	if got := reader.GetText(true); !strings.Contains(got, "NEXT_ROW_VALUE_TOKEN") || strings.Contains(got, "OTHER_PRIVATE_TOKEN") {
+		t.Fatalf("next row exposed hidden field: %q", got)
+	}
+	reader.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, 0), func(p tview.Primitive) { app.SetFocus(p) })
+	if row, col := bufferTable.GetSelection(); row != 2 || col != 1 {
+		t.Fatalf("returned selection = %d,%d", row, col)
+	}
+	if !applyColumnVisibility([]bool{true, true, true}) {
+		t.Fatal("could not restore hidden column")
+	}
+	showRowViewer(2, 2)
+	reader = app.GetFocus().(*tview.TextView)
+	if !strings.Contains(reader.GetText(true), "OTHER_PRIVATE_TOKEN") {
+		t.Fatal("restored field did not return in row viewer")
+	}
+}
+
+func TestPendingColumnSelectionDoesNotOpenEmptyRowViewer(t *testing.T) {
+	initView()
+	args.setDefault()
+	args.ShowNum = []int{3}
+	buf, err := createNewBufferWithData([][]string{{"a", "b"}, {"1", "2"}}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view = NewViewState(buf)
+	if err := drawUI(); err != nil {
+		t.Fatal(err)
+	}
+	bufferTable.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, 0), func(p tview.Primitive) { app.SetFocus(p) })
+	if UI.GetPage("rowViewer") != nil {
+		t.Fatal("pending column selection opened an empty row viewer")
+	}
+}
